@@ -1,0 +1,209 @@
+Øving 3
+Kognitive Arkitekturer
+Simon Olsen
+
+=====================================
+Oppgave A
+=====================================
+Gitt verdier for distance og delta som vist med de vertikale stiplete linjene i figuren (3.7 og 1.2), dvs hva slag aksjon gjør roboten med Mamdani resonnering?
+
+Verdiene vist på figuren er:
+Distance:	3.7
+Delta:		1.2
+
+
+Distance
+μ(x = verysmall):	    0.0
+μ(x = small):	        0.6
+μ(x = perfect):	      0.1
+μ(x = big):		        0.0
+μ(x = verybig):	      0.0
+Delta
+μ(y = shrinkingfast):	0.0
+μ(y = shrinking):	    0.0
+μ(y = stable):	      0.3
+μ(y = growing):	      0.4
+μ(y = growingfast):	  0.0
+
+
+Rules
+IF distance is VerySmall THEN action is BrakeHard
+  0.0
+IF distance is Small AND delta is Stable THEN action is SlowDown
+  min(0.6, 0.3) = 0.3
+IF distance is Small AND delta is Growing THEN action is None
+  min(0.6, 0.4) = 0.4
+IF distance is Perfect AND delta is Growing THEN action is SpeedUp
+  min(0.1, 0.4) = 0.1
+IF distance is VeryBig AND (delta is NOT Growing OR delta is NOT GrowingFast) THEN action is FloorIt
+  min(0.0, max((1-0.4), (1-0.0))) = min(0.0, max(0.6, 1)) = min(0.0, 1) = 0.0
+
+Actions {
+  BrakeHard:  0.0
+  SlowDown:   0.3
+  None:       0.4
+  SpeedUp:    0.1
+  FloorIt:    0.0
+}
+
+
+Center of Gravity
+((-10 + -9 + -8 + -7 + -6 + -5 ) * 0.0) + ((-7 + -6 + -5 + -4 + -3 + -2 + -1) * 0.3) + ((-3 + -2 + -1 + 0 + 1 + 2 + 3) * 0.4) + ((1 + 2 + 3 + 4 + 5 + 6 + 7) * 0.1) + ((5 + 6 + 7 + 8 + 9 + 10) * 0.0)
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                        0.3 * 7 + 0.4 * 7 + 0.1 * 7
+
+Center of Gravity = -1
+
+Action vil da være = None
+
+=====================================
+Oppgave B
+=====================================
+
+import java.util.*;
+
+import static java.lang.Math.max;
+import static java.lang.Math.min;
+import static java.lang.System.in;
+
+public class MamdaniReasoner {
+
+
+    public static double triangle(double position, double x0, double x1, double x2, double clip) {
+        double value = 0.0;
+        if (position >= x0 && position <= x1) value = (position - x0) / (x1 - x0);
+        else if (position >= x1 && position <= x2) value = (x2 - position) / (x1 - x0);
+        if (value > clip) value = clip;
+        return value;
+    }
+
+    public static double grade(double position, double x0, double x1, double clip) {
+        double value;
+        if (position >= x1) value = 1.0;
+        else if (position <= x0) value = 0.0;
+        else value = (position - x0) / (x1 - x0);
+        if (value > clip) value = clip;
+        return value;
+    }
+
+    public static double reverse_grade(double position, double x0, double x1, double clip) {
+        double value;
+        if (position <= x0) value = 1.0;
+        else if (position >= x1) value = 0.0;
+        else value = (x1 - position) / (x1 - x0);
+        if (value > clip) value = clip;
+        return value;
+    }
+
+    public static double and(double a, double b){
+        return min(a, b);
+    }
+
+    public static double or(double a, double b){
+        return max(a, b);
+    }
+
+    public static double not(double a){
+        return (1.0-a);
+    }
+
+    public static double cog(double brakeHard, double slowDown, double none, double speedUp, double floorIt){
+        double num = 0.0;
+        double denom = 0.0;
+
+        for (int i = -10; i<=10; i++){
+            List<Double> tempvals = Arrays.asList(reverse_grade(i, -8.0, -5.0, brakeHard), triangle(i, -7.0, -4.0, -1.0, slowDown),
+                    triangle(i, -3.0, 0.0, 3.0, none), triangle(i, 1.0, 4.0, 7.0, speedUp), grade(i, 5.0, 8.0, floorIt)
+            );
+
+            double tmpMaxValue = Collections.max(tempvals);
+
+            num += tmpMaxValue * i;
+            denom += tmpMaxValue;
+        }
+
+        return num / denom;
+    }
+
+    public static Map<String, Double> doMamdaniMagic(double distance, double delta){
+        Map<String, Double> result = new HashMap<>();
+
+        // RULES - DISTANCE
+        double distanceVerySmall = reverse_grade(distance, 1.0, 2.5, 1.0);
+        double distanceSmall = triangle(distance, 1.5, 3.0, 4.5, 1.0);
+        double distancePerfect = triangle(distance, 3.5, 5.0, 6.5, 1.0);
+        double distanceBig = triangle(distance, 5.5, 7.0, 8.5, 1.0);
+        double distanceVeryBig = grade(distance, 7.5, 9.0, 1.0);
+
+        // RULES - DELTA
+        double deltaShrinkingFast = reverse_grade(delta, -4.0, -2.5, 1.0);
+        double deltaShrinking = triangle(delta, -3.5, -2.0, -0.5, 1.0);
+        double deltaStable = triangle(delta, -1.5, 0.0, 1.5, 1.0);
+        double deltaGrowing = triangle(delta, 0.5, 2.0, 3.5, 1.0);
+        double deltaGrowingFast = grade(delta, 2.5, 4.0, 1.0);
+
+        // RULES - ACTIONS <- DIST&DELTA
+        double brakeHard = distanceVerySmall;
+        double slowDown = and(distanceSmall, deltaStable);
+        double none = and(distanceSmall, deltaGrowing);
+        double speedUp = and(distancePerfect, deltaGrowing);
+        double floorIt = and(distanceVeryBig, or(not(deltaGrowing), not(deltaGrowingFast)));
+
+
+        // Calculate center of gravity
+        double cog = cog(brakeHard, slowDown, none, speedUp, floorIt);
+
+        // RULES - ACTIONS
+        double mBrakeHard = reverse_grade(cog, -8.0, -5.0, brakeHard);
+        double mSlowDown = triangle(cog, -7.0, -4.0, -1.0, slowDown);
+        double mNone = triangle(cog, -3.0, 0.0, 3.0, none);
+        double mSpeedUp = triangle(cog, 1.0, 4.0, 7.0, speedUp);
+        double mFloorIt = grade(cog, 5.0, 8.0, floorIt);
+
+        ArrayList<ActionPair> mList = new ArrayList<>();
+        mList.add(new ActionPair("BrakeHard", mBrakeHard));
+        mList.add(new ActionPair("SlowDown", mSlowDown));
+        mList.add(new ActionPair("None", mNone));
+        mList.add(new ActionPair("SpeedUp", mSpeedUp));
+        mList.add(new ActionPair("FloorIt", mFloorIt));
+
+        String actionName = "undefined";
+        Double actionValue = 0.0;
+        for (ActionPair ap : mList) {
+            if (ap.value() > actionValue){
+                actionName = ap.name();
+                actionValue = ap.value();
+            }
+        }
+
+        result.put(actionName, actionValue);
+        return result;
+    }
+
+
+    public static void main(String[] args) {
+        System.out.println("Mamdani Reasoner! \n");
+        Scanner user_input = new Scanner( in );
+        System.out.print("Enter distance (0 - 10)");
+        double dist = Double.parseDouble(user_input.next( ));
+        System.out.print("Enter delta (-5 - 5)");
+        double delta = Double.parseDouble(user_input.next( ));
+
+        System.out.println(doMamdaniMagic(dist, delta));
+
+    }
+}
+
+class ActionPair {
+    private String name;
+    private Double value;
+
+    public ActionPair(String name, Double value)
+        {
+            this.name = name;
+            this.value = value;
+        }
+
+    public String name()   { return name; }
+    public Double value() { return value; }
+}
